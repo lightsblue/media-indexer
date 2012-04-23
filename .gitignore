@@ -1,0 +1,5 @@
+*.swp
+media.json
+my-config.js
+node_modules/*
+tags

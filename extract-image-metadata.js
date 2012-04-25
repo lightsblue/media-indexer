@@ -16,26 +16,63 @@ var myConfig = require('./my-config.js').MyConfiguration,
       host: host,
       port: 80,
       method: 'GET',
-      path: 'http://' + host + '/' + objectPath,
       headers: {
         Host: host,
         Range: 'bytes=0-31999'
       }
-    };
+    },
+    fetchImageMetadata,
+    failure;
 
-  http.get(options, function (res) {
-    console.log(res);
-    var myFile = fs.createWriteStream('myOutput.txt');
-    res.pipe(myFile);
-    res.on('end', function () {
-      ex.getImageTags(myFile.path, function (err, tags) {
-        if (typeof err !== null) {
-          console.log('Error: ' + err);
+  ////////////////////////////////////////////////////////////////////////////////
+  //
+  // Fetch a single file's metadata from S3.
+  //
+  ////////////////////////////////////////////////////////////////////////////////
+  fetchImageMetadata = function (options) {
+    var deferred = when.defer(),
+      data;
+    http.get(options, function (res) {
+      var myFile = fs.createWriteStream('/tmp/' + objectPath);
+      res.pipe(myFile);
+      res.on('end', function () {
+        // "ContentType": "image/jpeg"
+        // "ContentType": "video/quicktime"
+        // "ContentType": "video/x-msvideo"
+        console.log(res.statusCode);
+        if (res.statusCode !== 206) {
+          deferred.reject('Request to ' + options.path + ' returned ' + res.statusCode + '.');
+          return;
         }
-        console.log('tags', tags);
-        console.log('took ' + (new Date().getTime() - start) + ' ms');
+        data = {contentType: res.headers['content-type']};
+        if (res.headers['content-type'] === 'image/jpeg') {
+          ex.getImageTags(myFile.path, function (err, tags) {
+            if (err !== null) {
+              deferred.reject(err);
+            } else {
+              //console.log(tags);
+              data.dateTime = tags['Exif.Image.DateTime'];
+              data.cameraMake = tags['Exif.Image.Make'];
+              data.cameraModel = tags['Exif.Image.Model'];
+              deferred.resolve(data);
+            }
+          });
+        } else {
+          deferred.resolve(data);
+        }
       });
     });
-  });
+    return deferred.promise;
+  };
 
+  options.path = 'http://' + host + '/' + objectPath;
+
+  failure = function (err) {
+    console.log('Error: ' + err);
+  };
+
+  fetchImageMetadata(options).then(function (data) {
+    console.log(data);
+    console.log('took ' + (new Date().getTime() - start) + ' ms');
+  }, failure);
 }());

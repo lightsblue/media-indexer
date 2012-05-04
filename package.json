@@ -28,5 +28,9 @@
       "web": "http://lightsblue.com"
     }
   ],
-  "main": "./media-indexer"
+  "main": "./media-indexer",
+  "dependencies": {
+    "aws2js": ">= 0.6.12",
+    "when": ">= 1.0.4"
+  }
 }

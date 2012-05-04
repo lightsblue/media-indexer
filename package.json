@@ -1,0 +1,32 @@
+{
+  "name": "media-indexer",
+  "version": "0.0.1",
+  "description": "Index media on S3.",
+  "keywords": ["S3", "index", "media"],
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "http://www.opensource.org/licenses/mit-license.php"
+    }
+  ],
+  "repositories": [
+    {
+      "type": "git",
+      "url": "https://github.com/lightsblue/media-indexer"
+    }
+  ],
+  "bugs": "https://github.com/nvihinen/media-indexer/issues",
+  "maintainers": [
+    {
+      "name": "Noah Vihinen",
+      "web": "http://lightsblue.com"
+    }
+  ],
+  "contributors": [
+    {
+      "name": "Noah Vihinen",
+      "web": "http://lightsblue.com"
+    }
+  ],
+  "main": "./media-indexer"
+}

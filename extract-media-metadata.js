@@ -104,6 +104,7 @@ var myConfig = require('./my-config.js').MyConfiguration,
 
   // MOV
   fetchMediaMetadata('002fde119fb97df7c912ae0788fe5f64').then(function (data) {
+    console.log(data);
     console.log('took ' + (new Date().getTime() - start) + ' ms');
   }, failure);
 

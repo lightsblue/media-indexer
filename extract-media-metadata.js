@@ -17,10 +17,49 @@ var start = new Date().getTime(),
   optionsStr = JSON.stringify(options),
   metadata,
   failure,
-  getUserHome;
+  getUserHome,
+  extractBodyMetadata;
 
 getUserHome = function () {
   return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'];
+};
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Extract the data given in the data hash from the specified range of object
+// with id.  The data is an object literal of name-regex pairs.
+//
+////////////////////////////////////////////////////////////////////////////////
+extractBodyMetadata = function (id, data, range) {
+  'use strict';
+  var deferred = when.defer(),
+    tailOpts = JSON.parse(optionsStr); // lazy-man's clone
+  tailOpts.path += id;
+  tailOpts.headers.Range = 'bytes=' + range;
+  http.get(tailOpts, function (res) {
+    var tailBuf = new Buffer(2000),
+      bytesWritten = 0;
+    res.on('data', function (chunkBuffer) {
+      chunkBuffer.copy(tailBuf, bytesWritten, 0, chunkBuffer.length - 1);
+      bytesWritten += chunkBuffer.length;
+    });
+    res.on('end', function () {
+      var key, regex, match;
+      for (key in data) {
+        if (data.hasOwnProperty(key)) {
+          regex = data[key];
+          match = tailBuf.toString('ascii').match(regex);
+          if (match.length > 0) {
+            data[key] = match[0];
+          } else {
+            delete data[key];
+          }
+        }
+      }
+      deferred.resolve(data);
+    });
+  });
+  return deferred.promise;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,50 +75,45 @@ metadata = function (id) {
   options.headers.Range = 'bytes=0-31999';
   options.path += id; // build up the HTTP Request path
   http.get(options, function (res) {
-    var myFile = fs.createWriteStream('/tmp/' + id),
-      size;
+    var myFile = fs.createWriteStream('/tmp/' + id);
     res.pipe(myFile);
     res.on('end', function () {
-      // "ContentType": "image/jpeg"
-      // "ContentType": "video/quicktime"
-      // "ContentType": "video/x-msvideo"
+      var regex;
+
       if (res.statusCode !== 206 && res.statusCode !== 200) {
         deferred.reject('Request to ' + options.path + ' returned ' + res.statusCode + '.');
         return;
       }
       data = {contentType: res.headers['content-type']};
+
+      // "ContentType": "image/jpeg"
+      // "ContentType": "video/quicktime"
+      // "ContentType": "video/x-msvideo"
+
       if (res.headers['content-type'] === 'image/jpeg') {
-        ex.getImageTags(myFile.path, function (err, tags) {
-          if (err !== null) {
-            deferred.reject(err);
-          } else {
-            data.dateTime = tags['Exif.Image.DateTime'];
-            deferred.resolve(data);
-          }
-        });
-      } else if (res.headers['content-type'] === 'video/quicktime') {
-        size = res.headers['content-range'].split(/\//)[1];
-        var tailOpts = JSON.parse(optionsStr); // lazy-man's clone
-        tailOpts.path += id;
-        tailOpts.headers.Range = 'bytes=-2000';
-        http.get(tailOpts, function (res) {
-          var tailBuf = new Buffer(2000),
-            bytesWritten = 0,
-            regex = /[0-9]{4}\-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\-[0-9]{4}/;
-          res.on('data', function (chunkBuffer) {
-            chunkBuffer.copy(tailBuf, bytesWritten, 0, chunkBuffer.length - 1);
-            bytesWritten += chunkBuffer.length;
-          });
-          res.on('end', function () {
-            var match = tailBuf.toString('ascii').match(regex);
-            if (match.length > 0) {
-              data.dateTime = match[0];
+        regex = /[0-9]{4}\:[0-9]{2}\:[0-9]{2} [0-9]{2}\:[0-9]{2}\:[0-9]{2}/;
+        extractBodyMetadata(id, {dateTime: regex}, '0-1999').then(function (bodyMetadata) {
+          var key;
+          for (key in bodyMetadata) {
+            if (bodyMetadata.hasOwnProperty(key)) {
+              data[key] = bodyMetadata[key];
             }
-            deferred.resolve(data);
-          });
-        }).on('error', deferred.reject);
+          }
+          deferred.resolve(data);
+        }, deferred.refect);
+      } else if (res.headers['content-type'] === 'video/quicktime') {
+        regex = /[0-9]{4}\-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\-[0-9]{4}/;
+        extractBodyMetadata(id, {dateTime: regex}, '-2000').then(function (bodyMetadata) {
+          var key;
+          for (key in bodyMetadata) {
+            if (bodyMetadata.hasOwnProperty(key)) {
+              data[key] = bodyMetadata[key];
+            }
+          }
+          deferred.resolve(data);
+        }, deferred.refect);
       } else {
-        deferred.resolve(null);
+        deferred.reject("Can't extract metadata for content type " + res.headers['content-type']);
       }
     });
   });

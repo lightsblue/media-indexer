@@ -35,9 +35,9 @@ extractBodyMetadata = function (id, data, range) {
   var deferred = when.defer(),
     tailOpts = JSON.parse(optionsStr); // lazy-man's clone
   tailOpts.path += id;
-  tailOpts.headers.Range = 'bytes=' + range;
+  tailOpts.headers.Range = range > 0 ? 'bytes=0-' + (range - 1) : 'bytes=' + range;
   http.get(tailOpts, function (res) {
-    var tailBuf = new Buffer(2000),
+    var tailBuf = new Buffer(Math.abs(range)),
       bytesWritten = 0;
     res.on('data', function (chunkBuffer) {
       chunkBuffer.copy(tailBuf, bytesWritten, 0, chunkBuffer.length - 1);
@@ -49,16 +49,17 @@ extractBodyMetadata = function (id, data, range) {
         if (data.hasOwnProperty(key)) {
           regex = data[key];
           match = tailBuf.toString('ascii').match(regex);
-          if (match.length > 0) {
+          if (match !== null && match.length > 0) {
             data[key] = match[0];
           } else {
             delete data[key];
           }
         }
       }
+      console.log('finishing ' + id);
       deferred.resolve(data);
     });
-  });
+  }).end();
   return deferred.promise;
 };
 
@@ -72,6 +73,10 @@ metadata = function (id) {
     data,
     options = JSON.parse(optionsStr);
 
+  if (typeof id !== 'string') {
+    deferred.reject('id of object must be of type string');
+  }
+
   options.headers.Range = 'bytes=0-31999';
   options.path += id; // build up the HTTP Request path
   http.get(options, function (res) {
@@ -84,7 +89,7 @@ metadata = function (id) {
         deferred.reject('Request to ' + options.path + ' returned ' + res.statusCode + '.');
         return;
       }
-      data = {contentType: res.headers['content-type']};
+      data = {key: id, contentType: res.headers['content-type']};
 
       // "ContentType": "image/jpeg"
       // "ContentType": "video/quicktime"
@@ -92,7 +97,7 @@ metadata = function (id) {
 
       if (res.headers['content-type'] === 'image/jpeg') {
         regex = /[0-9]{4}\:[0-9]{2}\:[0-9]{2} [0-9]{2}\:[0-9]{2}\:[0-9]{2}/;
-        extractBodyMetadata(id, {dateTime: regex}, '0-1999').then(function (bodyMetadata) {
+        extractBodyMetadata(id, {dateTime: regex}, 2000).then(function (bodyMetadata) {
           var key;
           for (key in bodyMetadata) {
             if (bodyMetadata.hasOwnProperty(key)) {
@@ -100,10 +105,10 @@ metadata = function (id) {
             }
           }
           deferred.resolve(data);
-        }, deferred.refect);
+        }, deferred.reject);
       } else if (res.headers['content-type'] === 'video/quicktime') {
         regex = /[0-9]{4}\-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\-[0-9]{4}/;
-        extractBodyMetadata(id, {dateTime: regex}, '-2000').then(function (bodyMetadata) {
+        extractBodyMetadata(id, {dateTime: regex}, -2000).then(function (bodyMetadata) {
           var key;
           for (key in bodyMetadata) {
             if (bodyMetadata.hasOwnProperty(key)) {
@@ -111,12 +116,12 @@ metadata = function (id) {
             }
           }
           deferred.resolve(data);
-        }, deferred.refect);
+        }, deferred.reject);
       } else {
         deferred.reject("Can't extract metadata for content type " + res.headers['content-type']);
       }
     });
-  });
+  }).end();
   return deferred.promise;
 };
 exports.metadata = metadata;

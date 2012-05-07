@@ -1,6 +1,7 @@
 var myConfig = require('./my-config.js').MyConfiguration,
   s3 = require('aws2js').load('s3', myConfig.account, myConfig.secretKey),
   fs = require('fs'),
+  extract = require('./extract-media-metadata.js'),
   when = require('when');
 
 (function () {
@@ -77,7 +78,8 @@ var myConfig = require('./my-config.js').MyConfiguration,
   };
 
   saveContentType = function (data) {
-    objects[data.key].ContentType = data.data['content-type'];
+    objects[data.key].ContentType = data.contentType;
+    objects[data.key].DateTime = data.dateTime;
   };
 
   failure = function (error) {
@@ -96,15 +98,14 @@ var myConfig = require('./my-config.js').MyConfiguration,
     console.log(objectCount + ' total objects found.');
 
     Object.keys(objects).forEach(function (curKey) {
-      var headPromise = getHead(curKey);
-      headPromises.push(headPromise);
-      headPromise.then(saveContentType);
+      var p = extract.metadata(curKey);
+      headPromises.push(p);
+      p.then(saveContentType);
     });
 
     when.all(headPromises).then(function () {
-      console.log('Retrieved all content types.');
-      console.log('Fetched objects and content types in ' + (new Date().getTime() - start) + ' ms.');
-
+      console.log('Indexed metadata in ' + (new Date().getTime() - start) + ' ms.');
+      console.log('Writing to media.json');
       fs.writeFile("./media.json", JSON.stringify(objects, null, 2), function (err) {
         if (err) {
           failure(err);

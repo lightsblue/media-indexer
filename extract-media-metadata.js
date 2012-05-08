@@ -98,10 +98,12 @@ metadata = function (id) {
       if (res.headers['content-type'] === 'image/jpeg') {
         regex = /[0-9]{4}\:[0-9]{2}\:[0-9]{2} [0-9]{2}\:[0-9]{2}\:[0-9]{2}/;
         extractBodyMetadata(id, {dateTime: regex}, 2000).then(function (bodyMetadata) {
-          var key;
+          var key, c, d;
           for (key in bodyMetadata) {
             if (bodyMetadata.hasOwnProperty(key)) {
-              data[key] = bodyMetadata[key];
+              c = bodyMetadata[key].split(' ');
+              d = c[0].replace(/:/, '-');
+              data[key] = d + 'T' + c[1];
             }
           }
           deferred.resolve(data);

@@ -44,7 +44,6 @@ var myConfig = require('./my-config.js').MyConfiguration,
   ////////////////////////////////////////////////////////////////////////////////
   getMedia = function () {
     var deferred = when.defer(),
-      //headPromises = [],
       getPage;
 
     getPage = function (marker) {
@@ -61,7 +60,7 @@ var myConfig = require('./my-config.js').MyConfiguration,
         } else {
           for (i = 0; i < data.Contents.length; i++) {
             curKey = data.Contents[i].Key;
-            objects[curKey] = data.Contents[i];
+            objects[curKey] = {};
           }
           console.log(Object.keys(objects).length + ' objects so far...');
           if (data.IsTruncated === 'true') {
@@ -77,9 +76,11 @@ var myConfig = require('./my-config.js').MyConfiguration,
     return deferred.promise;
   };
 
-  saveContentType = function (data) {
-    objects[data.key].ContentType = data.contentType;
-    objects[data.key].DateTime = data.dateTime;
+  saveContentType = function (key) {
+    return function (data) {
+      objects[key].type = data.contentType;
+      objects[key].time = data.dateTime;
+    };
   };
 
   failure = function (error) {
@@ -100,13 +101,14 @@ var myConfig = require('./my-config.js').MyConfiguration,
     Object.keys(objects).forEach(function (curKey) {
       var p = extract.metadata(curKey);
       headPromises.push(p);
-      p.then(saveContentType);
+      p.then(saveContentType(curKey));
     });
 
     when.all(headPromises).then(function () {
       console.log('Indexed metadata in ' + (new Date().getTime() - start) + ' ms.');
       console.log('Writing to media.json');
-      fs.writeFile("./media.json", JSON.stringify(objects, null, 2), function (err) {
+      var indexStr = JSON.stringify(objects, null, 2);
+      fs.writeFile("./media.json", indexStr, function (err) {
         if (err) {
           failure(err);
         } else {

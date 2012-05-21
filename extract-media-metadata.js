@@ -1,8 +1,7 @@
 var myConfig = require('./my-config.js').MyConfiguration,
   fs = require('fs'),
   http = require('http'),
-  when = require('when'),
-  ex = require('exiv2');
+  when = require('when');
 
 var start = new Date().getTime(),
   bucket = 'vihinen',
@@ -18,8 +17,10 @@ var start = new Date().getTime(),
   metadata,
   failure,
   getUserHome,
-  extractBodyMetadata;
+  extractBodyMetadata,
+  count = 0;
 
+// TODO Use this for finding S3 credentials
 getUserHome = function () {
   return process.env[(process.platform === 'win32') ? 'USERPROFILE' : 'HOME'];
 };
@@ -56,7 +57,10 @@ extractBodyMetadata = function (id, data, range) {
           }
         }
       }
-      console.log('finishing ' + id);
+      if ((count % 100) === 0) {
+        console.log('finishing ' + id + ' (and 100 others)');
+      }
+      count++;
       deferred.resolve(data);
     });
   }).end();
@@ -77,11 +81,9 @@ metadata = function (id) {
     deferred.reject('id of object must be of type string');
   }
 
-  options.headers.Range = 'bytes=0-31999';
   options.path += id; // build up the HTTP Request path
-  http.get(options, function (res) {
-    var myFile = fs.createWriteStream('/tmp/' + id);
-    res.pipe(myFile);
+  options.method = 'HEAD';
+  http.request(options, function (res) {
     res.on('end', function () {
       var regex;
 
@@ -102,7 +104,7 @@ metadata = function (id) {
           for (key in bodyMetadata) {
             if (bodyMetadata.hasOwnProperty(key)) {
               c = bodyMetadata[key].split(' ');
-              d = c[0].replace(/:/, '-');
+              d = c[0].replace(/:/g, '-');
               data[key] = d + 'T' + c[1];
             }
           }

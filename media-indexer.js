@@ -9,7 +9,8 @@ var myConfig = require('./my-config.js').MyConfiguration,
 
   s3.setBucket('vihinen');
 
-  var maxKeys = 1000,
+  var maxKeysPerPage = 1000,
+    maxObjects = 1000000,
     objects = {},
     getHead,
     getMedia,
@@ -47,7 +48,7 @@ var myConfig = require('./my-config.js').MyConfiguration,
       getPage;
 
     getPage = function (marker) {
-      var url = '?prefix=&max-keys=' + maxKeys,
+      var url = '?prefix=&max-keys=' + maxKeysPerPage,
         lastKey,
         curKey,
         i;
@@ -63,7 +64,7 @@ var myConfig = require('./my-config.js').MyConfiguration,
             objects[curKey] = {};
           }
           console.log(Object.keys(objects).length + ' objects so far...');
-          if (data.IsTruncated === 'true') {
+          if ((Object.keys(objects).length < maxObjects) && data.IsTruncated === 'true') {
             lastKey = data.Contents[data.Contents.length - 1].Key;
             getPage(lastKey);
           } else {
@@ -99,8 +100,10 @@ var myConfig = require('./my-config.js').MyConfiguration,
     console.log(objectCount + ' total objects found.');
 
     Object.keys(objects).forEach(function (curKey) {
-      var p = extract.metadata(curKey);
-      headPromises.push(p);
+      var p = extract.metadata(curKey),
+        wrapped = when.defer();
+      p.then(wrapped.resolve, wrapped.resolve); // continue on success or failure
+      headPromises.push(wrapped.promise);
       p.then(saveContentType(curKey));
     });
 
